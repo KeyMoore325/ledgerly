@@ -229,51 +229,100 @@ function healthScore(a: Partial, b: BudgetData): number {
 function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggestion[] {
   const out: Suggestion[] = [];
   const fmt = (n: number) => formatMoney(n, currency);
+  const monthYear = (months: number) =>
+    addMonths(months).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   if (a.income <= 0) {
     out.push({
       id: "income",
       severity: "info",
-      title: "Start with your take-home income",
-      detail: "Enter your monthly income after taxes so the planner can size your spending, debt payments and goals.",
+      title: "Let's start with what you bring home",
+      detail: "Pop in your monthly take-home pay (after taxes) and we'll take it from there. Everything else builds on this one number.",
     });
     return out;
   }
 
+  // ---- Wins: always lead with what's going well -------------------------
+  const wins: Suggestion[] = [];
+  const reached = a.goals.filter((g) => g.goal.target > 0 && g.remaining === 0);
+  if (reached.length) {
+    wins.push({
+      id: "win-reached",
+      severity: "win",
+      title: `You hit your ${reached[0].goal.name || "savings"} goal 🎉`,
+      detail: "That's a real milestone. Take a moment to enjoy it before picking your next target.",
+    });
+  }
+  const started = a.goals
+    .filter((g) => g.goal.saved > 0 && g.remaining > 0)
+    .sort((x, y) => y.goal.saved - x.goal.saved)[0];
+  if (started) {
+    wins.push({
+      id: "win-saved",
+      severity: "win",
+      title: `You've already saved ${fmt(started.goal.saved)} toward ${started.goal.name || "your goal"} 🎉`,
+      detail: `That's ${Math.round(started.progress * 100)}% of the way there. The hardest part is starting, and you've done it.`,
+    });
+  }
+  if (a.available > 0) {
+    wins.push({
+      id: "win-surplus",
+      severity: "win",
+      title: `You have ${fmt(a.available)} left over each month`,
+      detail: "That breathing room is what moves your goals and debts forward. Nice work.",
+    });
+  }
+  if (b.debts.length === 0 || a.totalDebt === 0) {
+    wins.push({
+      id: "win-nodebt",
+      severity: "win",
+      title: "No debt holding you back",
+      detail: "Every extra dollar can go straight to your goals. That's a big advantage.",
+    });
+  } else if (a.payoff.months) {
+    wins.push({
+      id: "win-debtfree",
+      severity: "win",
+      title: `You're on track to be debt-free by ${monthYear(a.payoff.months)}`,
+      detail: "Stick with the plan and every payment gets you closer.",
+    });
+  }
+  out.push(...wins.slice(0, 2));
+
+  // ---- Things to work on -----------------------------------------------
   if (a.available < 0) {
     const gap = -a.available;
     out.push({
       id: "deficit",
       severity: "warning",
-      title: `You're spending ${fmt(gap)} more than you earn each month`,
+      title: `Spending is running about ${fmt(gap)} ahead of income`,
       detail:
         a.wants >= gap
-          ? `Trimming flexible "wants" by ${fmt(gap)} would balance the budget. Start with the largest discretionary items.`
-          : `Cutting all wants won't fully close the gap. Look at the biggest needs (housing, transport, insurance) for renegotiation, or consider ways to raise income.`,
+          ? `Good news: trimming your flexible spending by ${fmt(gap)} would balance things out. Start with the biggest "want" and see how far that gets you.`
+          : `Flexible spending alone won't quite close this gap, and that's okay. Your biggest bills (rent, car, insurance) are worth a second look, and so are ways to bring in a bit more.`,
       monthlyImpact: gap,
     });
   }
 
-  if (a.ratios.needs > 0.5) {
+  // When spending already exceeds income, the deficit note covers big bills, so skip this one.
+  if (a.ratios.needs > 0.5 && a.available >= 0) {
     out.push({
       id: "needs-high",
       severity: a.ratios.needs > 0.65 ? "warning" : "tip",
-      title: `Essentials take ${Math.round(a.ratios.needs * 100)}% of income`,
-      detail: `A common guideline is about 50% for needs (including minimum debt payments). Shopping insurance, refinancing, or reducing housing or transport costs gives the most leverage.`,
+      title: `Essentials are taking up ${Math.round(a.ratios.needs * 100)}% of your paycheck`,
+      detail: `Many people aim for around half. This is really common in high-cost areas. If you get a chance, shopping around for insurance or your phone plan can free up money without changing your day-to-day.`,
       monthlyImpact: (a.ratios.needs - 0.5) * a.income,
     });
   }
 
-  if (a.ratios.wants > 0.3) {
-    const cut = (a.ratios.wants - 0.3) * a.income;
+  const cut = (a.ratios.wants - 0.3) * a.income;
+  if (a.ratios.wants > 0.3 && cut >= 25) {
     const biggest = [...b.expenses].filter((e) => e.category === "wants").sort((x, y) => y.amount - x.amount)[0];
     out.push({
       id: "wants-high",
       severity: "tip",
-      title: `Trim discretionary spending by about ${fmt(cut)}/month`,
-      detail: `Wants are ${Math.round(a.ratios.wants * 100)}% of income versus a 30% guideline.${
-        biggest ? ` Your largest is "${biggest.name}" at ${fmt(biggest.amount)}/month.` : ""
-      } Redirecting this would speed up your goals.`,
+      title: `Finding ${fmt(cut)} a month in fun money would speed things up`,
+      detail: `${biggest ? `Your biggest one is ${biggest.name} at ${fmt(biggest.amount)}/month. ` : ""}No need to cut it all. Even trimming a little gives your goals a real boost.`,
       monthlyImpact: cut,
     });
   }
@@ -282,8 +331,8 @@ function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggesti
     out.push({
       id: "savings-low",
       severity: "tip",
-      title: `Aim to free up ${fmt(0.2 * a.income - a.available)} more per month`,
-      detail: `You have ${Math.round(a.ratios.savings * 100)}% of income left for savings and extra debt payments. Targeting 20% builds resilience over time.`,
+      title: `Freeing up another ${fmt(0.2 * a.income - a.available)} a month would give you more cushion`,
+      detail: `Right now about ${Math.round(a.ratios.savings * 100)}% of your income goes to future you. Working toward 20% over time makes surprises a lot less stressful.`,
     });
   }
 
@@ -293,8 +342,8 @@ function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggesti
     out.push({
       id: "emergency",
       severity: "info",
-      title: "Add an emergency fund goal",
-      detail: `Three months of essential costs is about ${fmt(target)}. Having it keeps surprises from turning into new debt.`,
+      title: "Consider adding a safety-net fund 🛟",
+      detail: `About ${fmt(target)} would cover three months of essentials. It's what keeps a surprise car repair from turning into new debt.`,
     });
   }
 
@@ -303,12 +352,12 @@ function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggesti
     out.push({
       id: "high-apr",
       severity: "warning",
-      title: `Prioritize "${high[0].name}" at ${high[0].apr}% APR`,
-      detail: `High-interest debt usually costs more than savings earn. ${
+      title: `Tackle ${high[0].name || "your highest-interest debt"} first (${high[0].apr}% interest)`,
+      detail: `High-interest debt grows faster than most savings can keep up with. ${
         a.allocation.debtExtra > 0
-          ? `The plan sends ${fmt(a.allocation.debtExtra)}/month extra here, after your dated goals.`
-          : "Once you have money left over after your goals, send it here first."
-      } Ask the lender about a lower rate, or look at a 0% balance transfer.`,
+          ? `The plan already sends an extra ${fmt(a.allocation.debtExtra)}/month here.`
+          : "Once you have a little left over, this is the best place for it."
+      } It's also worth calling your lender to ask about a lower rate. It often works!`,
     });
   }
 
@@ -316,8 +365,8 @@ function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggesti
     out.push({
       id: "debt-trap",
       severity: "warning",
-      title: "Minimum payments won't clear your debt",
-      detail: "At least one balance grows faster than its minimum payment. Raise that payment or contact the lender about a hardship or lower-rate plan.",
+      title: "One of your balances needs a bigger payment",
+      detail: "At the current minimum, the interest is outpacing the payment. Bumping it up a bit, or asking the lender about a hardship plan, gets it moving the right way.",
     });
   }
 
@@ -327,23 +376,23 @@ function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggesti
       out.push({
         id: "extra-payments",
         severity: "info",
-        title: `Extra payments save about ${fmt(saved)} in interest`,
-        detail: `You'd be debt-free in ${a.payoff.months} months instead of ${a.payoffMinimumOnly.months}.`,
+        title: `Your extra payments save you about ${fmt(saved)} 💪`,
+        detail: `You'll be debt-free ${a.payoffMinimumOnly.months - a.payoff.months} months sooner than paying only the minimums.`,
       });
     }
   }
 
   const diff = a.payoff.totalInterest - a.payoffAlt.totalInterest;
   if (b.debts.length > 1 && diff > 25) {
-    const other = b.strategy === "avalanche" ? "snowball" : "avalanche";
+    const other = b.strategy === "avalanche" ? "Highest interest first" : "Smallest balance first";
     out.push({
       id: "strategy",
       severity: "tip",
-      title: `Switching to ${other} saves about ${fmt(diff)}`,
+      title: `Switching to "${other}" would save you about ${fmt(diff)}`,
       detail:
-        other === "avalanche"
-          ? "Avalanche pays the highest-APR debt first, which minimizes total interest."
-          : "Snowball clears the smallest balances first. Here it also happens to cost less.",
+        b.strategy === "snowball"
+          ? "Paying the highest-interest debt first costs the least overall. Either way you're making progress."
+          : "For your balances, clearing the smallest ones first happens to cost less too.",
     });
   }
 
@@ -351,33 +400,50 @@ function buildSuggestions(a: Partial, b: BudgetData, currency: string): Suggesti
     if (gp.onTrack || gp.remaining === 0) continue;
     const req = gp.requiredMonthly ?? 0;
     const months = gp.projectedMonths;
+    const name = gp.goal.name || "This goal";
     out.push({
       id: `goal-${gp.goal.id}`,
       severity: "tip",
-      title: `"${gp.goal.name}" is behind schedule`,
+      title: `${name} could use a boost`,
       detail:
         months !== null
-          ? `Reaching it by the target date needs ${fmt(req)}/month, but the plan can fund ${fmt(
+          ? `To hit your date it needs ${fmt(req)}/month, and right now the plan can put in ${fmt(
               gp.allocatedMonthly,
-            )}. At this pace you'd finish around ${addMonths(months).toLocaleDateString(undefined, {
-              month: "short",
-              year: "numeric",
-            })}. You can push back the date or free up more cash.`
-          : `There's no surplus to put toward this goal yet. Free up money elsewhere, or pause it until your debts are paid down.`,
+            )}. At this pace you'll get there around ${monthYear(months)}. Moving the date back is totally fine, and so is finding a little extra.`
+          : `There isn't room for it in this month's plan yet, and that's okay. Once a debt is paid off or some spending frees up, it'll start growing.`,
     });
   }
 
-  if (out.length === 0 || (out.every((s) => s.severity === "info") && a.available > 0)) {
+  if (!out.some((s) => s.severity === "warning" || s.severity === "tip")) {
     out.push({
       id: "on-track",
       severity: "info",
-      title: "Your plan looks healthy",
-      detail: "Keep automating transfers on payday and review this plan when your income or expenses change.",
+      title: "You're in great shape ✨",
+      detail: "Setting up automatic transfers on payday keeps this going without thinking about it. Check back whenever life changes.",
     });
   }
 
-  const rank = { warning: 0, tip: 1, info: 2 } as const;
-  return out.sort((x, y) => rank[x.severity] - rank[y.severity]);
+  const rank = { win: 0, warning: 1, tip: 2, info: 3 } as const;
+  const sorted = out.sort((x, y) => rank[x.severity] - rank[y.severity]);
+  // Only one "Start here" at a time, so the list never feels like a pile of alarms.
+  let seenWarning = false;
+  return sorted.map((s) => {
+    if (s.severity !== "warning") return s;
+    if (!seenWarning) {
+      seenWarning = true;
+      return s;
+    }
+    return { ...s, severity: "tip" as const };
+  });
+}
+
+/** Friendly framing for the 0-100 health score. */
+export function scoreMood(score: number, hasIncome: boolean) {
+  if (!hasIncome) return { label: "Let's get started", line: "Add your income to see how things look.", tone: "neutral" as const };
+  if (score >= 80) return { label: "Looking strong", line: "Your money is working for you. Keep it up!", tone: "good" as const };
+  if (score >= 60) return { label: "Building momentum", line: "You're on solid ground, with a few easy wins below.", tone: "good" as const };
+  if (score >= 35) return { label: "Finding your footing", line: "A few small changes will make a real difference.", tone: "caution" as const };
+  return { label: "Getting started", line: "Everyone starts somewhere. Let's take it one step at a time.", tone: "caution" as const };
 }
 
 export function formatMoney(n: number, currency = "USD", compact = false): string {

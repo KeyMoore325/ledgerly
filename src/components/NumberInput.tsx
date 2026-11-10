@@ -42,7 +42,7 @@ export function NumberInput({ id, value, onChange, prefix, suffix, min = 0, step
         const n = parseFloat(raw);
         onChange(Number.isNaN(n) ? 0 : Math.max(min, n));
       }}
-      style={suffix ? { paddingRight: 28 } : undefined}
+      style={suffix ? { paddingRight: 28, ...(prefix ? {} : { paddingLeft: 10 }) } : undefined}
     />
   );
 

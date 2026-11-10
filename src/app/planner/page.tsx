@@ -12,9 +12,9 @@ export default function PlannerPage() {
   return (
     <div className="container page">
       <header className="page-head">
-        <p className="eyebrow">Planner</p>
-        <h1>Your budget plan</h1>
-        <p>Results update as you type. Everything is saved in this browser, so there&apos;s nothing to submit.</p>
+        <p className="eyebrow">Your planner</p>
+        <h1>Let&apos;s map out your money</h1>
+        <p>Fill in what you know and skip what you don&apos;t. Your plan takes shape as you type, and you can change anything anytime.</p>
       </header>
       <Planner />
     </div>

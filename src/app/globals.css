@@ -22,8 +22,8 @@
   --on-primary: #ffffff;
   --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
   --shadow: 0 1px 3px rgb(15 23 42 / 0.08), 0 8px 24px -12px rgb(15 23 42 / 0.12);
-  --radius: 12px;
-  --radius-sm: 8px;
+  --radius: 18px;
+  --radius-sm: 12px;
   --font: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --gutter: 16px;
@@ -264,7 +264,7 @@ main { display: block; min-height: 60vh; }
 .stat-label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
 .stat-value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .stat-value.pos { color: var(--success); }
-.stat-value.neg { color: var(--danger); }
+.stat-value.neg { color: var(--warning); }
 
 .rows { display: grid; gap: 10px; }
 .row-item {
@@ -296,7 +296,7 @@ main { display: block; min-height: 60vh; }
 .split-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-2); gap: 2px; }
 .split-bar > span { transition: flex-grow 0.4s var(--ease); min-width: 0; }
 .legend { display: grid; gap: 8px; margin-top: 14px; }
-.legend-item { display: grid; grid-template-columns: 12px 1fr auto auto; gap: 10px; align-items: center; font-size: 0.9rem; }
+.legend-item { display: grid; grid-template-columns: 12px 1fr auto auto; gap: 10px; align-items: start; font-size: 0.9rem; }
 .legend-swatch { width: 12px; height: 12px; border-radius: 3px; }
 .legend-target { color: var(--muted); font-size: 0.8rem; }
 
@@ -308,8 +308,8 @@ main { display: block; min-height: 60vh; }
 .suggestions { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .suggestion { display: grid; grid-template-columns: 4px 1fr; gap: 12px; padding: 12px 14px 12px 0; border-radius: var(--radius-sm); background: var(--surface-2); overflow: hidden; animation: fade-in 0.3s var(--ease); }
 .suggestion::before { content: ""; background: var(--accent); }
-.suggestion.warning::before { background: var(--danger); }
-.suggestion.tip::before { background: var(--warning); }
+.suggestion.warning::before { background: var(--warning); }
+.suggestion.tip::before { background: var(--primary); }
 .suggestion h3 { font-size: 0.95rem; margin: 0 0 4px; }
 .suggestion p { margin: 0; font-size: 0.875rem; color: var(--muted); }
 
@@ -362,3 +362,44 @@ main { display: block; min-height: 60vh; }
 
 .mobile-only { display: inline-flex; }
 @media (min-width: 1024px) { .mobile-only { display: none; } }
+
+/* ==========================================================================
+   Friendlier planner touches
+   ========================================================================== */
+.welcome { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary-soft) 70%, var(--surface)), var(--surface) 70%); }
+.welcome-title { font-size: 1.15rem; font-weight: 650; margin: 0 0 2px; }
+.section-title { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; margin: 0; }
+.card-head .section-title { margin: 0; }
+.strategy { display: grid; gap: 8px; margin-bottom: 14px; padding: 12px 14px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface)); }
+.strategy .segmented { justify-self: start; background: var(--surface); }
+.empty { border-style: dashed; background: color-mix(in srgb, var(--surface-2) 60%, transparent); line-height: 1.6; }
+
+.label-row { display: inline-flex; align-items: center; gap: 6px; position: relative; }
+.info-tip { display: inline-flex; }
+.info-tip-btn { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font: inherit; font-size: 0.7rem; font-weight: 700; line-height: 1; cursor: pointer; padding: 0;
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease); }
+.info-tip-btn:hover, .info-tip-btn[aria-expanded="true"] { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+.info-tip-body { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; width: min(260px, 70vw);
+  padding: 10px 12px; border-radius: var(--radius-sm); background: var(--text); color: var(--bg);
+  font-size: 0.8rem; font-weight: 400; line-height: 1.5; box-shadow: var(--shadow); animation: fade-in 0.15s var(--ease); }
+
+.mood-label { font-size: 1.3rem; font-weight: 700; margin: 0 0 2px; letter-spacing: -0.01em; }
+.score-ring span { font-size: 1.6rem; }
+.legend-hint { display: block; font-size: 0.75rem; color: var(--muted); }
+
+.suggestion { padding-top: 14px; padding-bottom: 14px; }
+.suggestion.win { background: color-mix(in srgb, var(--success-soft) 70%, var(--surface)); }
+.suggestion.win::before { background: var(--success); }
+.suggestion.info::before { background: var(--accent); }
+.sugg-tag { display: inline-block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; color: var(--muted); }
+.sugg-tag.win { color: var(--success); }
+.sugg-tag.warning { color: var(--warning); }
+.sugg-tag.tip { color: var(--primary); }
+
+.celebrate { margin: 0 0 14px; padding: 12px 14px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--success-soft) 70%, var(--surface)); color: var(--text); font-size: 0.95rem; }
+.milestones { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 0.875rem; color: var(--muted); }
+.progress { height: 10px; }
+.live-dot { flex: none; }

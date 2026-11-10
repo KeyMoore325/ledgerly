@@ -41,22 +41,22 @@ export function AiAdvice({ budget, analysis, currency }: { budget: BudgetData; a
     <section className="card ai-box" aria-labelledby="ai-h" aria-busy={state === "loading"}>
       <div className="card-head">
         <h2 id="ai-h" style={{ fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="spark" /> Ask Claude for a plan
+          <Icon name="spark" /> Want a second opinion?
         </h2>
       </div>
       <p className="small muted">
-        Sends this profile&apos;s numbers (not your name or email) to Claude for a personalized review.
+        Claude can look over your numbers (never your name or email) and suggest a personal game plan.
       </p>
       <button type="button" className="btn btn-primary" onClick={ask} disabled={disabled}>
-        {state === "loading" ? (<><span className="spinner" aria-hidden="true" /> Thinking…</>) : state === "done" ? "Refresh advice" : "Get AI advice"}
+        {state === "loading" ? (<><span className="spinner" aria-hidden="true" /> Thinking…</>) : state === "done" ? "Refresh advice" : "Ask Claude"}
       </button>
-      {analysis.income <= 0 && <p className="hint" style={{ marginTop: 8 }}>Enter your income first.</p>}
+      {analysis.income <= 0 && <p className="hint" style={{ marginTop: 8 }}>Add your take-home pay first and Claude can take a look.</p>}
 
       <div aria-live="polite">
         {state === "error" && <p className="notice error" style={{ marginTop: 14 }} role="alert">{error}</p>}
         {advice && state !== "error" && (
           <div className="ai-out" style={{ marginTop: 16 }}>
-            {stale && <p className="notice info">Your budget changed since this advice. Refresh to update it.</p>}
+            {stale && <p className="notice info">You&apos;ve updated your budget since this advice. Refresh to get ideas that match.</p>}
             <p>{advice.summary}</p>
             <ul>
               {advice.actions.map((x, i) => (
@@ -68,7 +68,7 @@ export function AiAdvice({ budget, analysis, currency }: { budget: BudgetData; a
                 </li>
               ))}
             </ul>
-            <p className="small" style={{ marginTop: 10 }}><strong>Watch out:</strong> {advice.watch_out}</p>
+            <p className="small" style={{ marginTop: 10 }}><strong>One thing to keep in mind:</strong> {advice.watch_out}</p>
           </div>
         )}
       </div>

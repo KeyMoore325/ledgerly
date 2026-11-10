@@ -44,7 +44,7 @@ export interface Profile {
   budget: BudgetData;
 }
 
-export type SuggestionSeverity = "info" | "tip" | "warning";
+export type SuggestionSeverity = "win" | "info" | "tip" | "warning";
 
 export interface Suggestion {
   id: string;

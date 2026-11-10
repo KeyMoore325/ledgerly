@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { actions, emptyBudget, uid, useStore } from "@/lib/store";
-import { addMonths, analyze, formatDuration, formatMoney } from "@/lib/budget";
-import type { BudgetData, Debt, Expense, Goal } from "@/lib/types";
+import { addMonths, analyze, formatDuration, formatMoney, scoreMood } from "@/lib/budget";
+import type { BudgetData, Debt, Expense, Goal, SuggestionSeverity } from "@/lib/types";
 import { Icon } from "./Icon";
 import { NumberInput } from "./NumberInput";
 import { AiAdvice } from "./AiAdvice";
+import { InfoTip } from "./InfoTip";
 
 type ListKey = "expenses" | "debts" | "goals";
 
@@ -23,15 +24,45 @@ function currencySymbol(currency: string) {
   }
 }
 
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+const GOAL_EMOJI: [RegExp, string][] = [
+  [/emergency|rainy|buffer|safety/i, "🛟"],
+  [/vacation|trip|travel|holiday/i, "✈️"],
+  [/house|home|down ?payment|apartment/i, "🏡"],
+  [/car|vehicle/i, "🚗"],
+  [/wedding/i, "💍"],
+  [/school|college|tuition|education/i, "🎓"],
+  [/baby|kid|child/i, "🍼"],
+  [/retire/i, "🌴"],
+  [/gift|holiday|christmas|birthday/i, "🎁"],
+];
+const goalEmoji = (name: string) => GOAL_EMOJI.find(([re]) => re.test(name))?.[1] ?? "🎯";
+
+const SEVERITY_LABEL: Record<SuggestionSeverity, string> = {
+  win: "Going well",
+  warning: "Start here",
+  tip: "Worth a look",
+  info: "Nice to know",
+};
+
+const MOOD_EMOJI = { good: "🌟", caution: "🌱", neutral: "👋" } as const;
+const MOOD_COLOR = { good: "var(--success)", caution: "var(--warning)", neutral: "var(--primary)" } as const;
+
 export function Planner() {
   const { active, profiles, ready } = useStore();
   const budget = active?.budget;
   const analysis = useMemo(() => (budget ? analyze(budget, active?.currency) : null), [budget, active?.currency]);
+  const [showAllIdeas, setShowAllIdeas] = useState(false);
+  const IDEA_LIMIT = 5;
 
   if (!ready || !active || !budget || !analysis) {
     return (
       <div className="card" aria-busy="true">
-        <p className="muted" style={{ margin: 0 }}>Loading your plan…</p>
+        <p className="muted" style={{ margin: 0 }}>Getting your plan ready…</p>
       </div>
     );
   }
@@ -39,6 +70,7 @@ export function Planner() {
   const cur = active.currency;
   const sym = currencySymbol(cur);
   const money = (n: number) => formatMoney(n, cur);
+  const monthYear = (months: number) => addMonths(months).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   const set = (fn: (b: BudgetData) => BudgetData) => actions.updateBudget(fn);
   function patchItem<K extends ListKey>(key: K, id: string, patch: Partial<BudgetData[K][number]>) {
@@ -54,83 +86,84 @@ export function Planner() {
     set((b) => ({ ...b, goals: [...b.goals, { id: uid(), name: "", target: 0, saved: 0, targetDate: "" } as Goal] }));
 
   const a = analysis;
-  const scoreColor = a.healthScore >= 75 ? "var(--success)" : a.healthScore >= 50 ? "var(--warning)" : "var(--danger)";
-  const scoreLabel = a.healthScore >= 75 ? "Healthy" : a.healthScore >= 50 ? "Needs attention" : "At risk";
+  const mood = scoreMood(a.healthScore, a.income > 0);
+  const firstName = active.name && active.name !== "My budget" ? active.name.split(" ")[0] : "";
 
   const split = [
-    { label: "Needs + debt minimums", value: a.ratios.needs, target: "≈50%", color: "var(--primary)" },
-    { label: "Wants", value: a.ratios.wants, target: "≈30%", color: "var(--accent)" },
-    { label: "Savings & extra payments", value: a.ratios.savings, target: "≥20%", color: "var(--success)" },
+    { label: "Essentials", hint: "rent, bills, groceries, minimum debt payments", value: a.ratios.needs, target: "aim ~50%", color: "var(--primary)" },
+    { label: "Fun & flexible", hint: "dining out, shopping, hobbies", value: a.ratios.wants, target: "aim ~30%", color: "var(--accent)" },
+    { label: "Future you", hint: "savings and extra debt payments", value: a.ratios.savings, target: "aim 20%+", color: "var(--success)" },
   ];
   const overspent = Math.max(0, -a.available / (a.income || 1));
+  const strategyName = budget.strategy === "avalanche" ? "Highest interest first" : "Smallest balance first";
 
   return (
     <div className="planner">
       {/* ------------------------------------------------------------- inputs */}
       <div className="stack">
-        <div className="card" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="card welcome">
           <span className="avatar" style={{ background: active.color }} aria-hidden="true">
             {active.name.slice(0, 1).toUpperCase()}
           </span>
-          <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontWeight: 600 }}>{active.name}</div>
-            <div className="small muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span className="live-dot" aria-hidden="true" /> Saved automatically · syncs across tabs
-            </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <p className="welcome-title">
+              {greeting()}{firstName ? `, ${firstName}` : ""} <span aria-hidden="true">👋</span>
+            </p>
+            <p className="small muted" style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
+              <span className="live-dot" aria-hidden="true" /> Everything saves as you go, so there&apos;s no need to hit save.
+            </p>
           </div>
-          {profiles.length > 1 && (
-            <label className="sr-only" htmlFor="profile-switch">Switch profile</label>
-          )}
-          {profiles.length > 1 && (
-            <select
-              id="profile-switch"
-              className="select"
-              style={{ width: "auto" }}
-              value={active.id}
-              onChange={(e) => actions.switchProfile(e.target.value)}
-            >
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          )}
-          <Link href="/profile" className="btn btn-secondary btn-sm">Manage profiles</Link>
-          <a href="#results" className="btn btn-primary btn-sm mobile-only">See results</a>
+          <div className="btn-row">
+            {profiles.length > 1 && (
+              <>
+                <label className="sr-only" htmlFor="profile-switch">Switch profile</label>
+                <select id="profile-switch" className="select" style={{ width: "auto", minHeight: 36 }}
+                  value={active.id} onChange={(e) => actions.switchProfile(e.target.value)}>
+                  {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </>
+            )}
+            <Link href="/profile" className="btn btn-secondary btn-sm">Profiles</Link>
+            <a href="#results" className="btn btn-primary btn-sm mobile-only">See how you&apos;re doing</a>
+          </div>
         </div>
 
         <section className="card" aria-labelledby="income-h">
           <div className="card-head">
-            <h2 id="income-h" className="h3" style={{ fontSize: "1.15rem" }}>Monthly income</h2>
+            <h2 id="income-h" className="section-title"><span aria-hidden="true">💵</span> What you bring home</h2>
           </div>
           <div className="field">
-            <label htmlFor="income">Take-home pay, after taxes</label>
-            <NumberInput
-              id="income"
-              prefix={sym}
-              value={budget.monthlyIncome}
-              onChange={(n) => set((b) => ({ ...b, monthlyIncome: n }))}
-              describedBy="income-hint"
-            />
-            <span id="income-hint" className="hint">Include every regular source: salary, side work, benefits.</span>
+            <label htmlFor="income">Monthly take-home pay</label>
+            <NumberInput id="income" prefix={sym} value={budget.monthlyIncome}
+              onChange={(n) => set((b) => ({ ...b, monthlyIncome: n }))} describedBy="income-hint" />
+            <span id="income-hint" className="hint">
+              The amount that actually lands in your account after taxes. Include side gigs or benefits too.
+            </span>
           </div>
         </section>
 
         <section className="card" aria-labelledby="exp-h">
           <div className="card-head">
-            <h2 id="exp-h" style={{ fontSize: "1.15rem" }}>Expenses</h2>
-            <span className="muted small">{money(a.needs + a.wants)}/mo</span>
+            <h2 id="exp-h" className="section-title"><span aria-hidden="true">🏠</span> Bills &amp; spending</h2>
+            <span className="muted small">{money(a.needs + a.wants)} a month</span>
           </div>
+          <p className="hint" style={{ marginTop: -6 }}>
+            Mark each one as <strong>Essential</strong> (you&apos;d have to pay it no matter what) or{" "}
+            <strong>Flexible</strong> (nice to have, easier to adjust).
+          </p>
           <div className="rows">
-            {budget.expenses.length === 0 && <p className="empty">No expenses yet. Add rent, groceries, subscriptions…</p>}
+            {budget.expenses.length === 0 && (
+              <p className="empty">Let&apos;s add your regular costs. Rent, groceries and streaming services are good places to start.</p>
+            )}
             {budget.expenses.map((e, i) => (
               <div className="row-item expense" key={e.id}>
                 <div className="field span-2">
-                  <label htmlFor={`e-name-${e.id}`}>Name</label>
-                  <input id={`e-name-${e.id}`} className="input" value={e.name} placeholder={`Expense ${i + 1}`}
+                  <label htmlFor={`e-name-${e.id}`}>What is it?</label>
+                  <input id={`e-name-${e.id}`} className="input" value={e.name} placeholder={i === 0 ? "e.g. Rent" : "e.g. Groceries"}
                     onChange={(ev) => patchItem("expenses", e.id, { name: ev.target.value })} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`e-amt-${e.id}`}>Monthly</label>
+                  <label htmlFor={`e-amt-${e.id}`}>Per month</label>
                   <NumberInput id={`e-amt-${e.id}`} prefix={sym} value={e.amount}
                     onChange={(n) => patchItem("expenses", e.id, { amount: n })} />
                 </div>
@@ -138,8 +171,8 @@ export function Planner() {
                   <label htmlFor={`e-cat-${e.id}`}>Type</label>
                   <select id={`e-cat-${e.id}`} className="select" value={e.category}
                     onChange={(ev) => patchItem("expenses", e.id, { category: ev.target.value as Expense["category"] })}>
-                    <option value="needs">Need</option>
-                    <option value="wants">Want</option>
+                    <option value="needs">Essential</option>
+                    <option value="wants">Flexible</option>
                   </select>
                 </div>
                 <button type="button" className="btn btn-ghost icon-btn remove span-2" style={{ minHeight: 40 }}
@@ -150,48 +183,68 @@ export function Planner() {
             ))}
           </div>
           <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={addExpense}>
-            <Icon name="plus" size={16} /> Add expense
+            <Icon name="plus" size={16} /> Add a cost
           </button>
         </section>
 
         <section className="card" aria-labelledby="debt-h">
           <div className="card-head">
-            <h2 id="debt-h" style={{ fontSize: "1.15rem" }}>Debts</h2>
-            <div className="segmented" role="group" aria-label="Payoff strategy">
+            <h2 id="debt-h" className="section-title"><span aria-hidden="true">💳</span> What you owe</h2>
+          </div>
+          <div className="strategy">
+            <span className="label">Which debt should get extra money first?</span>
+            <div className="segmented" role="group" aria-label="Payoff order">
               {(["avalanche", "snowball"] as const).map((s) => (
                 <button key={s} type="button" aria-pressed={budget.strategy === s}
                   onClick={() => set((b) => ({ ...b, strategy: s }))}>
-                  {s === "avalanche" ? "Avalanche" : "Snowball"}
+                  {s === "avalanche" ? "Highest interest" : "Smallest balance"}
                 </button>
               ))}
             </div>
+            <p className="hint" style={{ margin: 0 }}>
+              {budget.strategy === "avalanche"
+                ? "Saves the most money overall. Sometimes called the “avalanche” method."
+                : "Gives you quick wins as balances disappear. Sometimes called the “snowball” method."}
+            </p>
           </div>
-          <p className="hint" style={{ marginTop: -6 }}>
-            {budget.strategy === "avalanche"
-              ? "Avalanche: extra money goes to the highest interest rate first."
-              : "Snowball: extra money goes to the smallest balance first."}
-          </p>
           <div className="rows">
-            {budget.debts.length === 0 && <p className="empty">No debts. Nice! Add credit cards, loans or financing here.</p>}
+            {budget.debts.length === 0 && (
+              <p className="empty">No debts? Love that. 🙌 If you have a card or loan, add it here and we&apos;ll map out the fastest way to clear it.</p>
+            )}
             {budget.debts.map((d, i) => (
               <div className="row-item debt" key={d.id}>
                 <div className="field span-2">
-                  <label htmlFor={`d-name-${d.id}`}>Name</label>
-                  <input id={`d-name-${d.id}`} className="input" value={d.name} placeholder={`Debt ${i + 1}`}
+                  <label htmlFor={`d-name-${d.id}`}>What is it?</label>
+                  <input id={`d-name-${d.id}`} className="input" value={d.name} placeholder="e.g. Credit card"
                     onChange={(ev) => patchItem("debts", d.id, { name: ev.target.value })} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`d-bal-${d.id}`}>Balance</label>
+                  <label htmlFor={`d-bal-${d.id}`}>Amount owed</label>
                   <NumberInput id={`d-bal-${d.id}`} prefix={sym} value={d.balance}
                     onChange={(n) => patchItem("debts", d.id, { balance: n })} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`d-apr-${d.id}`}>APR</label>
+                  <span className="label-row">
+                    <label htmlFor={`d-apr-${d.id}`}>Interest rate</label>
+                    {i === 0 && (
+                      <InfoTip term="interest rate">
+                        The yearly interest rate (APR) on your statement. Higher rates make a balance grow faster, so
+                        those are usually worth paying off first.
+                      </InfoTip>
+                    )}
+                  </span>
                   <NumberInput id={`d-apr-${d.id}`} suffix="%" value={d.apr}
                     onChange={(n) => patchItem("debts", d.id, { apr: Math.min(n, 100) })} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`d-min-${d.id}`}>Min / mo</label>
+                  <span className="label-row">
+                    <label htmlFor={`d-min-${d.id}`}>Min. payment</label>
+                    {i === 0 && (
+                      <InfoTip term="minimum payment">
+                        The smallest amount you have to pay each month to stay in good standing. It&apos;s on your statement.
+                      </InfoTip>
+                    )}
+                  </span>
                   <NumberInput id={`d-min-${d.id}`} prefix={sym} value={d.minPayment}
                     onChange={(n) => patchItem("debts", d.id, { minPayment: n })} />
                 </div>
@@ -203,25 +256,27 @@ export function Planner() {
             ))}
           </div>
           <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={addDebt}>
-            <Icon name="plus" size={16} /> Add debt
+            <Icon name="plus" size={16} /> Add a debt
           </button>
         </section>
 
         <section className="card" aria-labelledby="goal-h">
           <div className="card-head">
-            <h2 id="goal-h" style={{ fontSize: "1.15rem" }}>Goals</h2>
+            <h2 id="goal-h" className="section-title"><span aria-hidden="true">🎯</span> What you&apos;re saving for</h2>
           </div>
           <div className="rows">
-            {budget.goals.length === 0 && <p className="empty">Add a goal: an emergency fund, a trip, a down payment…</p>}
+            {budget.goals.length === 0 && (
+              <p className="empty">What would you love to save for? A safety net 🛟, a trip ✈️, a new home 🏡. Big or small, it all counts.</p>
+            )}
             {budget.goals.map((g, i) => (
               <div className="row-item goal" key={g.id}>
                 <div className="field span-2">
                   <label htmlFor={`g-name-${g.id}`}>Goal</label>
-                  <input id={`g-name-${g.id}`} className="input" value={g.name} placeholder={`Goal ${i + 1}`}
+                  <input id={`g-name-${g.id}`} className="input" value={g.name} placeholder={i === 0 ? "e.g. Emergency fund" : "e.g. Vacation"}
                     onChange={(ev) => patchItem("goals", g.id, { name: ev.target.value })} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`g-t-${g.id}`}>Target</label>
+                  <label htmlFor={`g-t-${g.id}`}>Goal amount</label>
                   <NumberInput id={`g-t-${g.id}`} prefix={sym} value={g.target}
                     onChange={(n) => patchItem("goals", g.id, { target: n })} />
                 </div>
@@ -231,7 +286,7 @@ export function Planner() {
                     onChange={(n) => patchItem("goals", g.id, { saved: n })} />
                 </div>
                 <div className="field">
-                  <label htmlFor={`g-d-${g.id}`}>By date (optional)</label>
+                  <label htmlFor={`g-d-${g.id}`}>Hoping to reach it by</label>
                   <input id={`g-d-${g.id}`} className="input" type="date" value={g.targetDate}
                     onChange={(ev) => patchItem("goals", g.id, { targetDate: ev.target.value })} />
                 </div>
@@ -243,22 +298,17 @@ export function Planner() {
             ))}
           </div>
           <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={addGoal}>
-            <Icon name="plus" size={16} /> Add goal
+            <Icon name="plus" size={16} /> Add a goal
           </button>
         </section>
 
         <div className="btn-row">
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.resetToSample()}>
-            Load example budget
+            Try the example budget
           </button>
-          <button
-            type="button"
-            className="btn btn-danger btn-sm"
-            onClick={() => {
-              if (confirm("Clear every income, expense, debt and goal in this profile?")) set(() => emptyBudget());
-            }}
-          >
-            Clear all
+          <button type="button" className="btn btn-danger btn-sm"
+            onClick={() => { if (confirm("Start fresh? This clears everything in this profile.")) set(() => emptyBudget()); }}>
+            Start fresh
           </button>
         </div>
       </div>
@@ -266,91 +316,112 @@ export function Planner() {
       {/* ------------------------------------------------------------- results */}
       <div className="stack planner-side" id="results" style={{ scrollMarginTop: 80 }}>
         <div className="stats" role="list" aria-label="Summary">
-          <div className="stat" role="listitem"><div className="stat-label">Income</div><div className="stat-value">{money(a.income)}</div></div>
-          <div className="stat" role="listitem"><div className="stat-label">Spending</div><div className="stat-value">{money(a.needs + a.wants)}</div></div>
-          <div className="stat" role="listitem"><div className="stat-label">Debt minimums</div><div className="stat-value">{money(a.debtMinimums)}</div></div>
+          <div className="stat" role="listitem"><div className="stat-label">Coming in</div><div className="stat-value">{money(a.income)}</div></div>
+          <div className="stat" role="listitem"><div className="stat-label">Bills &amp; spending</div><div className="stat-value">{money(a.needs + a.wants)}</div></div>
+          <div className="stat" role="listitem"><div className="stat-label">Debt payments</div><div className="stat-value">{money(a.debtMinimums)}</div></div>
           <div className="stat" role="listitem">
-            <div className="stat-label">Left over</div>
-            <div className={`stat-value ${a.available >= 0 ? "pos" : "neg"}`} aria-live="polite">{money(a.available)}</div>
+            <div className="stat-label">{a.available >= 0 ? "Left over" : "Short this month"}</div>
+            <div className={`stat-value ${a.available >= 0 ? "pos" : "neg"}`} aria-live="polite">{money(Math.abs(a.available))}</div>
           </div>
         </div>
 
         <section className="card" aria-labelledby="health-h">
           <div className="score">
-            <div className="score-ring" style={{ ["--val" as string]: a.healthScore, ["--score-color" as string]: scoreColor }}
-              role="img" aria-label={`Budget health score ${a.healthScore} out of 100`}>
-              <span>{a.healthScore}</span>
+            <div className="score-ring" role="img" aria-label={`How you're doing: ${mood.label}`}
+              style={{ ["--val" as string]: a.income > 0 ? Math.max(a.healthScore, 6) : 0, ["--score-color" as string]: MOOD_COLOR[mood.tone] }}>
+              <span aria-hidden="true">{MOOD_EMOJI[mood.tone]}</span>
             </div>
             <div>
-              <h2 id="health-h" style={{ fontSize: "1.1rem", margin: 0 }}>Budget health</h2>
-              <p className="muted small" style={{ margin: "4px 0 0" }}>
-                {scoreLabel}. Based on cash flow, the 50/30/20 split, debt load and goal progress.
-              </p>
+              <p className="small muted" style={{ margin: 0 }} id="health-h">How you&apos;re doing</p>
+              <p className="mood-label">{mood.label}</p>
+              <p className="muted small" style={{ margin: 0 }}>{mood.line}</p>
             </div>
           </div>
 
-          <h3 style={{ fontSize: "0.95rem", marginTop: 20 }}>Where your income goes</h3>
+          <h3 style={{ fontSize: "0.95rem", marginTop: 22 }}>Where your money goes</h3>
           <div className="split-bar" aria-hidden="true">
             {split.map((s) => <span key={s.label} style={{ flexGrow: s.value, background: s.color }} />)}
-            {overspent > 0 && <span style={{ flexGrow: overspent, background: "var(--danger)" }} />}
+            {overspent > 0 && <span style={{ flexGrow: overspent, background: "var(--warning)" }} />}
           </div>
           <div className="legend">
             {split.map((s) => (
               <div className="legend-item" key={s.label}>
                 <span className="legend-swatch" style={{ background: s.color }} />
-                <span>{s.label}</span>
+                <span>
+                  {s.label}
+                  <span className="legend-hint">{s.hint}</span>
+                </span>
                 <strong>{Math.round(s.value * 100)}%</strong>
                 <span className="legend-target">{s.target}</span>
               </div>
             ))}
           </div>
+          <p className="hint" style={{ margin: "12px 0 0" }}>
+            These are friendly rules of thumb, not strict rules. Every budget looks a little different.
+          </p>
         </section>
 
         <section className="card" aria-labelledby="sugg-h">
-          <div className="card-head">
-            <h2 id="sugg-h" style={{ fontSize: "1.1rem" }}>Suggested adjustments</h2>
-            <span className="badge primary">{a.suggestions.length}</span>
-          </div>
-          <ul className="suggestions">
-            {a.suggestions.map((s) => (
+          <h2 id="sugg-h" className="section-title" style={{ marginBottom: 14 }}>
+            <span aria-hidden="true">💡</span> Ideas for you
+          </h2>
+          <ul className="suggestions" id="ideas-list">
+            {(showAllIdeas ? a.suggestions : a.suggestions.slice(0, IDEA_LIMIT)).map((s) => (
               <li key={s.id} className={`suggestion ${s.severity}`}>
                 <div>
+                  <span className={`sugg-tag ${s.severity}`}>{SEVERITY_LABEL[s.severity]}</span>
                   <h3>{s.title}</h3>
                   <p>{s.detail}</p>
                 </div>
               </li>
             ))}
           </ul>
+          {a.suggestions.length > IDEA_LIMIT && (
+            <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 10 }}
+              aria-expanded={showAllIdeas} aria-controls="ideas-list" onClick={() => setShowAllIdeas((v) => !v)}>
+              {showAllIdeas ? "Show fewer" : `Show ${a.suggestions.length - IDEA_LIMIT} more idea${a.suggestions.length - IDEA_LIMIT === 1 ? "" : "s"}`}
+            </button>
+          )}
         </section>
 
         <AiAdvice budget={budget} analysis={a} currency={cur} />
 
         <section className="card" aria-labelledby="plan-h">
-          <h2 id="plan-h" style={{ fontSize: "1.1rem" }}>Monthly plan for your surplus</h2>
-          <dl className="kv">
-            <dt>Toward goals</dt><dd>{money(a.allocation.goals)}</dd>
-            <dt>Extra debt payments</dt><dd>{money(a.allocation.debtExtra)}</dd>
-            {a.allocation.unassigned > 0 && (<><dt>Unassigned</dt><dd>{money(a.allocation.unassigned)}</dd></>)}
-          </dl>
+          <h2 id="plan-h" className="section-title">Where your extra money goes</h2>
+          {a.available > 0 ? (
+            <dl className="kv">
+              <dt>Toward your goals</dt><dd>{money(a.allocation.goals)}</dd>
+              <dt>Paying debt down faster</dt><dd>{money(a.allocation.debtExtra)}</dd>
+              {a.allocation.unassigned > 0 && (<><dt>Yours to decide</dt><dd>{money(a.allocation.unassigned)}</dd></>)}
+            </dl>
+          ) : (
+            <p className="muted small" style={{ margin: 0 }}>
+              Once there&apos;s a little left over each month, we&apos;ll show you the smartest place to put it.
+            </p>
+          )}
         </section>
 
         {budget.debts.length > 0 && (
           <section className="card" aria-labelledby="payoff-h">
             <div className="card-head">
-              <h2 id="payoff-h" style={{ fontSize: "1.1rem" }}>Debt payoff</h2>
-              <span className="badge">{budget.strategy}</span>
+              <h2 id="payoff-h" className="section-title">Your path to debt-free</h2>
+              <span className="badge">{strategyName}</span>
             </div>
+            {a.payoff.months ? (
+              <p className="celebrate">🎉 You&apos;re debt-free by <strong>{monthYear(a.payoff.months)}</strong>!</p>
+            ) : null}
             <dl className="kv">
-              <dt>Total owed</dt><dd>{money(a.totalDebt)}</dd>
-              <dt>Debt-free in</dt><dd>{formatDuration(a.payoff.months)}</dd>
-              {a.payoff.months ? (<><dt>Debt-free by</dt><dd>{addMonths(a.payoff.months).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</dd></>) : null}
-              <dt>Interest you&apos;ll pay</dt><dd>{money(a.payoff.totalInterest)}</dd>
-              <dt>Minimums only</dt><dd>{formatDuration(a.payoffMinimumOnly.months)} · {money(a.payoffMinimumOnly.totalInterest)}</dd>
+              <dt>Total to pay off</dt><dd>{money(a.totalDebt)}</dd>
+              <dt>Time to get there</dt><dd>{formatDuration(a.payoff.months)}</dd>
+              <dt>Interest along the way</dt><dd>{money(a.payoff.totalInterest)}</dd>
+              <dt>If you paid only the minimums</dt><dd>{formatDuration(a.payoffMinimumOnly.months)} · {money(a.payoffMinimumOnly.totalInterest)}</dd>
             </dl>
             {a.payoff.order.length > 0 && (
-              <ol className="small muted" style={{ margin: "14px 0 0", paddingLeft: "1.2em" }}>
+              <ol className="milestones">
                 {a.payoff.order.map((o) => (
-                  <li key={o.id}>{o.name || "Unnamed debt"} paid off in month {o.paidOffMonth}</li>
+                  <li key={o.id}>
+                    <span aria-hidden="true">✅</span> {o.name || "Debt"} gone by {monthYear(o.paidOffMonth)}
+                  </li>
                 ))}
               </ol>
             )}
@@ -359,13 +430,13 @@ export function Planner() {
 
         {a.goals.length > 0 && (
           <section className="card" aria-labelledby="goals-h">
-            <h2 id="goals-h" style={{ fontSize: "1.1rem" }}>Goal progress</h2>
+            <h2 id="goals-h" className="section-title">Your goals</h2>
             {a.goals.map((gp) => (
               <div className="goal-line" key={gp.goal.id}>
                 <div className="top">
-                  <strong>{gp.goal.name || "Unnamed goal"}</strong>
+                  <strong><span aria-hidden="true">{goalEmoji(gp.goal.name)}</span> {gp.goal.name || "Your goal"}</strong>
                   <span className={`badge ${gp.remaining === 0 ? "success" : gp.onTrack ? "primary" : "warning"}`}>
-                    {gp.remaining === 0 ? "Reached" : gp.onTrack ? "On track" : "Behind"}
+                    {gp.remaining === 0 ? "🎉 Reached!" : gp.onTrack ? "On track" : "Needs a boost"}
                   </span>
                 </div>
                 <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100}
@@ -373,13 +444,13 @@ export function Planner() {
                   <span style={{ width: `${gp.progress * 100}%` }} />
                 </div>
                 <div className="small muted">
-                  {money(gp.goal.saved)} of {money(gp.goal.target)}
+                  {money(gp.goal.saved)} of {money(gp.goal.target)} saved
                   {gp.remaining > 0 && (
                     <>
-                      {" · "}{money(gp.allocatedMonthly)}/mo
+                      {" · "}
                       {gp.projectedMonths !== null
-                        ? ` → ${addMonths(gp.projectedMonths).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`
-                        : " → not funded yet"}
+                        ? `${money(gp.allocatedMonthly)}/mo gets you there by ${monthYear(gp.projectedMonths)}`
+                        : "it'll start growing once there's room in the budget"}
                     </>
                   )}
                 </div>
