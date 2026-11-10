@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { actions, emptyBudget, uid, useStore } from "@/lib/store";
+import { actions, emptyBudget, profileInitial, uid, useStore } from "@/lib/store";
 import { addMonths, analyze, formatDuration, formatMoney, scoreMood } from "@/lib/budget";
 import type { BudgetData, Debt, Expense, Goal, SuggestionSeverity } from "@/lib/types";
 import { Icon } from "./Icon";
@@ -87,7 +87,7 @@ export function Planner() {
 
   const a = analysis;
   const mood = scoreMood(a.healthScore, a.income > 0);
-  const firstName = active.name && active.name !== "My budget" ? active.name.split(" ")[0] : "";
+  const callName = active.name.trim();
 
   const split = [
     { label: "Essentials", hint: "rent, bills, groceries, minimum debt payments", value: a.ratios.needs, target: "aim ~50%", color: "var(--primary)" },
@@ -103,11 +103,20 @@ export function Planner() {
       <div className="stack">
         <div className="card welcome">
           <span className="avatar" style={{ background: active.color }} aria-hidden="true">
-            {active.name.slice(0, 1).toUpperCase()}
+            {profileInitial(active)}
           </span>
           <div style={{ flex: 1, minWidth: 180 }}>
             <p className="welcome-title">
-              {greeting()}{firstName ? `, ${firstName}` : ""} <span aria-hidden="true">👋</span>
+              {greeting()}{callName ? `, ${callName}` : ""} <span aria-hidden="true">👋</span>
+            </p>
+            <p className="small muted" style={{ margin: "0 0 2px" }}>
+              You&apos;re working on <strong className="budget-name">{active.budgetName || "My budget"}</strong>
+              {!callName && (
+                <>
+                  {" · "}
+                  <Link href="/profile">Tell us your name</Link>
+                </>
+              )}
             </p>
             <p className="small muted" style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
               <span className="live-dot" aria-hidden="true" /> Everything saves as you go, so there&apos;s no need to hit save.
@@ -116,14 +125,14 @@ export function Planner() {
           <div className="btn-row">
             {profiles.length > 1 && (
               <>
-                <label className="sr-only" htmlFor="profile-switch">Switch profile</label>
+                <label className="sr-only" htmlFor="profile-switch">Switch budget</label>
                 <select id="profile-switch" className="select" style={{ width: "auto", minHeight: 36 }}
                   value={active.id} onChange={(e) => actions.switchProfile(e.target.value)}>
-                  {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {profiles.map((p) => <option key={p.id} value={p.id}>{p.budgetName || "My budget"}</option>)}
                 </select>
               </>
             )}
-            <Link href="/profile" className="btn btn-secondary btn-sm">Profiles</Link>
+            <Link href="/profile" className="btn btn-secondary btn-sm">Profile</Link>
             <a href="#results" className="btn btn-primary btn-sm mobile-only">See how you&apos;re doing</a>
           </div>
         </div>

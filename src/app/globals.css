@@ -403,3 +403,4 @@ main { display: block; min-height: 60vh; }
 .milestones { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 0.875rem; color: var(--muted); }
 .progress { height: 10px; }
 .live-dot { flex: none; }
+.budget-name { color: var(--text); font-weight: 600; }

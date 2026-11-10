@@ -27,7 +27,7 @@ export function ContactForm() {
   useEffect(() => {
     if (active && !prefilled.current) {
       prefilled.current = true;
-      setF((x) => ({ ...x, name: x.name || (active.name !== "My budget" ? active.name : ""), email: x.email || active.email }));
+      setF((x) => ({ ...x, name: x.name || active.name, email: x.email || active.email }));
     }
   }, [active]);
 

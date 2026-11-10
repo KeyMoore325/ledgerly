@@ -57,11 +57,18 @@ export function emptyBudget(): BudgetData {
   return { monthlyIncome: 0, strategy: "avalanche", expenses: [], debts: [], goals: [] };
 }
 
-function newProfile(name: string, budget: BudgetData, idx = 0): Profile {
+export const DEFAULT_BUDGET_NAME = "My budget";
+
+/** Avatar letter: the person's name if they gave one, otherwise the budget's. */
+export const profileInitial = (p: Pick<Profile, "name" | "budgetName">) =>
+  (p.name.trim() || p.budgetName.trim() || "?").slice(0, 1).toUpperCase();
+
+function newProfile(names: { name?: string; budgetName?: string }, budget: BudgetData, idx = 0): Profile {
   const now = new Date().toISOString();
   return {
     id: uid(),
-    name,
+    name: names.name?.trim() ?? "",
+    budgetName: names.budgetName?.trim() || DEFAULT_BUDGET_NAME,
     email: "",
     currency: "USD",
     color: COLORS[idx % COLORS.length],
@@ -79,17 +86,28 @@ let loaded = false;
 const listeners = new Set<() => void>();
 let channel: BroadcastChannel | null = null;
 
+/**
+ * Profiles saved before budgets had their own name used `name` as the budget
+ * label. Move that into `budgetName` and leave the person's name blank.
+ */
+function normalize(p: Profile): Profile {
+  if (typeof p.budgetName === "string" && p.budgetName.trim()) return p;
+  return { ...p, budgetName: p.name?.trim() || DEFAULT_BUDGET_NAME, name: "" };
+}
+
 function read(): State {
   try {
     const raw = window.localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as State;
-      if (Array.isArray(parsed.profiles) && parsed.profiles.length) return parsed;
+      if (Array.isArray(parsed.profiles) && parsed.profiles.length) {
+        return { ...parsed, profiles: parsed.profiles.map(normalize) };
+      }
     }
   } catch {
     /* storage unavailable or corrupt — fall through to a fresh start */
   }
-  const p = newProfile("My budget", sampleBudget());
+  const p = newProfile({}, sampleBudget());
   return { profiles: [p], activeId: p.id };
 }
 
@@ -156,16 +174,20 @@ export const actions = {
       ),
     });
   },
-  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "email" | "currency" | "color">>) {
+  updateProfile(id: string, patch: Partial<Pick<Profile, "name" | "budgetName" | "email" | "currency" | "color">>) {
     const s = getSnapshot();
     commit({
       ...s,
       profiles: s.profiles.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p)),
     });
   },
-  createProfile(name: string, withSample: boolean) {
+  createProfile(names: { name?: string; budgetName?: string }, withSample: boolean) {
     const s = getSnapshot();
-    const p = newProfile(name || "New profile", withSample ? sampleBudget() : emptyBudget(), s.profiles.length);
+    const p = newProfile(
+      { name: names.name, budgetName: names.budgetName || "New budget" },
+      withSample ? sampleBudget() : emptyBudget(),
+      s.profiles.length,
+    );
     commit({ profiles: [...s.profiles, p], activeId: p.id });
     return p.id;
   },
@@ -176,7 +198,7 @@ export const actions = {
     const s = getSnapshot();
     const profiles = s.profiles.filter((p) => p.id !== id);
     if (profiles.length === 0) {
-      const p = newProfile("My budget", emptyBudget());
+      const p = newProfile({}, emptyBudget());
       commit({ profiles: [p], activeId: p.id });
       return;
     }
@@ -196,7 +218,7 @@ export const actions = {
       throw new Error("That file doesn't look like a Budget Planner profile.");
     }
     const s = getSnapshot();
-    const p: Profile = { ...parsed, id: uid(), updatedAt: new Date().toISOString() };
+    const p: Profile = normalize({ ...parsed, id: uid(), updatedAt: new Date().toISOString() });
     commit({ profiles: [...s.profiles, p], activeId: p.id });
   },
 };

@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { actions, useStore } from "@/lib/store";
-import { analyze, formatMoney } from "@/lib/budget";
+import { actions, profileInitial, useStore } from "@/lib/store";
+import { analyze, formatMoney, scoreMood } from "@/lib/budget";
 import { Icon } from "./Icon";
 
 const COLORS = ["#2563EB", "#0EA5E9", "#7C3AED", "#059669", "#D97706", "#DB2777"];
@@ -11,19 +11,20 @@ const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "JPY", "MXN", "ZAR
 
 export function Profiles() {
   const { profiles, active, ready } = useStore();
-  const [newName, setNewName] = useState("");
+  const [newBudgetName, setNewBudgetName] = useState("");
+  const [newName, setNewName] = useState<string | null>(null); // null = follow the active profile's name
   const [withSample, setWithSample] = useState(false);
   const [msg, setMsg] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  if (!ready || !active) return <div className="card"><p className="muted" style={{ margin: 0 }}>Loading…</p></div>;
+  if (!ready || !active) return <div className="card"><p className="muted" style={{ margin: 0 }}>Getting your profiles ready…</p></div>;
 
   const exportProfile = () => {
     const blob = new Blob([actions.exportActive()], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${active.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "profile"}.json`;
+    link.download = `${active.budgetName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "budget"}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -31,31 +32,43 @@ export function Profiles() {
   const importProfile = async (file: File) => {
     try {
       actions.importProfile(await file.text());
-      setMsg({ kind: "success", text: `Imported "${file.name}" as a new profile.` });
+      setMsg({ kind: "success", text: `All set! "${file.name}" was added as a new budget.` });
     } catch (e) {
-      setMsg({ kind: "error", text: e instanceof Error ? e.message : "Import failed." });
+      setMsg({ kind: "error", text: e instanceof Error ? e.message : "That file couldn't be imported." });
     }
   };
+
+  const personName = newName ?? active.name;
 
   return (
     <div className="planner">
       <div className="stack">
         <section className="card" aria-labelledby="edit-h">
           <div className="card-head">
-            <h2 id="edit-h" style={{ fontSize: "1.15rem" }}>Active profile</h2>
-            <Link href="/planner" className="btn btn-primary btn-sm">Open planner <Icon name="arrow" size={16} /></Link>
+            <h2 id="edit-h" className="section-title"><span aria-hidden="true">👤</span> About you</h2>
+            <Link href="/planner" className="btn btn-primary btn-sm">Back to planner <Icon name="arrow" size={16} /></Link>
           </div>
           <div className="stack">
             <div className="field">
-              <label htmlFor="p-name">Display name</label>
-              <input id="p-name" className="input" value={active.name} maxLength={60}
+              <label htmlFor="p-name">What should we call you?</label>
+              <input id="p-name" className="input" value={active.name} maxLength={40} autoComplete="nickname"
+                placeholder="e.g. Sam" aria-describedby="p-name-hint"
                 onChange={(e) => actions.updateProfile(active.id, { name: e.target.value })} />
+              <span id="p-name-hint" className="hint">A first name or nickname works great. We&apos;ll use it to say hi.</span>
+            </div>
+            <div className="field">
+              <label htmlFor="p-budget">Budget name</label>
+              <input id="p-budget" className="input" value={active.budgetName} maxLength={60}
+                placeholder="e.g. Household budget" aria-describedby="p-budget-hint"
+                onChange={(e) => actions.updateProfile(active.id, { budgetName: e.target.value })}
+                onBlur={(e) => { if (!e.target.value.trim()) actions.updateProfile(active.id, { budgetName: "My budget" }); }} />
+              <span id="p-budget-hint" className="hint">Helps you tell your budgets apart, like &ldquo;Household&rdquo; or &ldquo;If I move to Denver.&rdquo;</span>
             </div>
             <div className="field">
               <label htmlFor="p-email">Email (optional)</label>
               <input id="p-email" className="input" type="email" autoComplete="email" value={active.email}
                 aria-describedby="p-email-hint" onChange={(e) => actions.updateProfile(active.id, { email: e.target.value })} />
-              <span id="p-email-hint" className="hint">Used only to pre-fill the contact form. It never leaves this device otherwise.</span>
+              <span id="p-email-hint" className="hint">Only used to fill in the contact form for you. It stays on this device.</span>
             </div>
             <div className="field">
               <label htmlFor="p-cur">Currency</label>
@@ -65,7 +78,7 @@ export function Profiles() {
               </select>
             </div>
             <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-              <legend className="label" style={{ marginBottom: 8 }}>Color</legend>
+              <legend className="label" style={{ marginBottom: 8 }}>Pick a color</legend>
               <div className="swatches" role="radiogroup" aria-label="Profile color">
                 {COLORS.map((c) => (
                   <button key={c} type="button" className="swatch" role="radio" aria-checked={active.color === c}
@@ -77,13 +90,16 @@ export function Profiles() {
         </section>
 
         <section className="card" aria-labelledby="data-h">
-          <h2 id="data-h" style={{ fontSize: "1.15rem" }}>Backup &amp; transfer</h2>
+          <h2 id="data-h" className="section-title"><span aria-hidden="true">📦</span> Back up or move a budget</h2>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Your budgets live in this browser. Save a copy to keep it safe, or open it on another device.
+          </p>
           <div className="btn-row">
             <button type="button" className="btn btn-secondary btn-sm" onClick={exportProfile}>
-              <Icon name="download" size={16} /> Export active profile
+              <Icon name="download" size={16} /> Save a copy
             </button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
-              <Icon name="upload" size={16} /> Import profile
+              <Icon name="upload" size={16} /> Open a saved copy
             </button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden
               onChange={(e) => { const f = e.target.files?.[0]; if (f) importProfile(f); e.target.value = ""; }} />
@@ -94,29 +110,32 @@ export function Profiles() {
 
       <div className="stack">
         <section className="card" aria-labelledby="all-h">
-          <h2 id="all-h" style={{ fontSize: "1.15rem" }}>All profiles</h2>
+          <h2 id="all-h" className="section-title" style={{ marginBottom: 14 }}><span aria-hidden="true">🗂️</span> Your budgets</h2>
           <ul className="profile-list">
             {profiles.map((p) => {
               const a = analyze(p.budget, p.currency);
+              const mood = scoreMood(a.healthScore, a.income > 0);
               const isActive = p.id === active.id;
+              const label = p.budgetName || "My budget";
               return (
                 <li key={p.id} className={`profile-item ${isActive ? "active" : ""}`}>
-                  <span className="avatar" style={{ background: p.color }} aria-hidden="true">{p.name.slice(0, 1).toUpperCase() || "?"}</span>
+                  <span className="avatar" style={{ background: p.color }} aria-hidden="true">{profileInitial(p)}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name || "Untitled"}</div>
+                    <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
                     <div className="small muted">
-                      Health {a.healthScore} · {formatMoney(a.available, p.currency)}/mo left
+                      {p.name ? `${p.name} · ` : ""}{mood.label}
+                      {a.income > 0 && ` · ${formatMoney(Math.abs(a.available), p.currency)} ${a.available >= 0 ? "left over" : "short"}`}
                     </div>
                   </div>
                   {isActive ? (
-                    <span className="badge primary">Active</span>
+                    <span className="badge primary">Open now</span>
                   ) : (
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => actions.switchProfile(p.id)}>
-                      Switch<span className="sr-only"> to {p.name}</span>
+                      Open<span className="sr-only"> {label}</span>
                     </button>
                   )}
-                  <button type="button" className="btn btn-ghost icon-btn" aria-label={`Delete ${p.name}`}
-                    onClick={() => { if (confirm(`Delete the profile "${p.name}"? This can't be undone.`)) actions.deleteProfile(p.id); }}>
+                  <button type="button" className="btn btn-ghost icon-btn" aria-label={`Delete ${label}`}
+                    onClick={() => { if (confirm(`Delete "${label}"? This can't be undone.`)) actions.deleteProfile(p.id); }}>
                     <Icon name="trash" size={18} />
                   </button>
                 </li>
@@ -126,18 +145,30 @@ export function Profiles() {
         </section>
 
         <section className="card" aria-labelledby="new-h">
-          <h2 id="new-h" style={{ fontSize: "1.15rem" }}>New profile</h2>
-          <form className="stack" onSubmit={(e) => { e.preventDefault(); actions.createProfile(newName.trim(), withSample); setNewName(""); }}>
+          <h2 id="new-h" className="section-title"><span aria-hidden="true">✨</span> Start another budget</h2>
+          <p className="hint" style={{ marginTop: 8 }}>Great for a shared household plan, or to try out a &ldquo;what if&rdquo; without touching your main one.</p>
+          <form className="stack" onSubmit={(e) => {
+            e.preventDefault();
+            actions.createProfile({ budgetName: newBudgetName.trim(), name: personName.trim() }, withSample);
+            setNewBudgetName("");
+            setNewName(null);
+            setMsg(null);
+          }}>
             <div className="field">
-              <label htmlFor="new-name">Name</label>
-              <input id="new-name" className="input" value={newName} maxLength={60} placeholder="e.g. Household, or What if I move"
+              <label htmlFor="new-budget">Budget name</label>
+              <input id="new-budget" className="input" value={newBudgetName} maxLength={60} placeholder="e.g. Household, or What if I move"
+                onChange={(e) => setNewBudgetName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="new-name">What should we call you? <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+              <input id="new-name" className="input" value={personName} maxLength={40} placeholder="e.g. Sam" autoComplete="nickname"
                 onChange={(e) => setNewName(e.target.value)} />
             </div>
             <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: "0.92rem" }}>
               <input type="checkbox" checked={withSample} onChange={(e) => setWithSample(e.target.checked)} style={{ width: 18, height: 18 }} />
-              Start with the example budget
+              Start with the example numbers
             </label>
-            <div><button type="submit" className="btn btn-primary"><Icon name="plus" size={18} /> Create profile</button></div>
+            <div><button type="submit" className="btn btn-primary"><Icon name="plus" size={18} /> Create budget</button></div>
           </form>
         </section>
       </div>

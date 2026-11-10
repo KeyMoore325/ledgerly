@@ -35,7 +35,10 @@ export interface BudgetData {
 
 export interface Profile {
   id: string;
+  /** What the person wants to be called, used in greetings. May be empty. */
   name: string;
+  /** Label for this plan, e.g. "Household budget". */
+  budgetName: string;
   email: string;
   currency: string; // ISO 4217, e.g. USD
   color: string;
