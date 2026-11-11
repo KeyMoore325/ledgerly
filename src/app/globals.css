@@ -404,3 +404,28 @@ main { display: block; min-height: 60vh; }
 .progress { height: 10px; }
 .live-dot { flex: none; }
 .budget-name { color: var(--text); font-weight: 600; }
+
+/* ---------- Accounts ---------- */
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.link-btn:hover { color: var(--accent); }
+.auth-card { max-width: 440px; margin: 0 auto; }
+.auth-tabs { display: flex; width: 100%; margin-bottom: 18px; }
+.auth-tabs button { flex: 1; }
+.account-menu { position: relative; }
+.account-trigger { gap: 8px; padding: 0 8px; }
+.avatar-sm { width: 28px; height: 28px; font-size: 0.8rem; background: var(--primary); }
+.account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.account-dropdown { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; z-index: 50; display: flex; flex-direction: column; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md, 0 10px 30px rgba(15, 23, 42, 0.12)); animation: fade-in 0.15s var(--ease); }
+.account-dropdown a, .account-dropdown button { display: block; width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px; border: 0; background: transparent; font: inherit; font-size: 0.92rem; color: var(--text); text-decoration: none; cursor: pointer; transition: background-color 0.15s var(--ease); }
+.account-dropdown a:hover, .account-dropdown button:hover, .account-dropdown a:focus-visible, .account-dropdown button:focus-visible { background: var(--surface-2); }
+.account-email { margin: 4px 10px 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 639px) { .account-name { display: none; } }
+.banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent); }
+.banner p { margin: 0; flex: 1 1 260px; font-size: 0.92rem; }
+.banner .btn-row { margin: 0; }
+.banner.success { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 25%, transparent); }
+.save-status { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.save-status.error { color: var(--warning); }
+.live-dot.warn { background: var(--warning); animation: none; }
+.acct-details { margin: 12px 0; }
+.acct-details summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; color: var(--primary); margin-bottom: 10px; }

@@ -2,15 +2,19 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { actions, profileInitial, useStore } from "@/lib/store";
 import { analyze, formatMoney, scoreMood } from "@/lib/budget";
 import { Icon } from "./Icon";
+import { NewPasswordForm } from "./NewPasswordForm";
 
 const COLORS = ["#2563EB", "#0EA5E9", "#7C3AED", "#059669", "#D97706", "#DB2777"];
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "JPY", "MXN", "ZAR", "NGN"];
 
 export function Profiles() {
-  const { profiles, active, ready } = useStore();
+  const { profiles, active, ready, mode, user, accountsEnabled } = useStore();
+  const cloud = mode === "cloud";
+  const router = useRouter();
   const [newBudgetName, setNewBudgetName] = useState("");
   const [newName, setNewName] = useState<string | null>(null); // null = follow the active profile's name
   const [withSample, setWithSample] = useState(false);
@@ -64,12 +68,20 @@ export function Profiles() {
                 onBlur={(e) => { if (!e.target.value.trim()) actions.updateProfile(active.id, { budgetName: "My budget" }); }} />
               <span id="p-budget-hint" className="hint">Helps you tell your budgets apart, like &ldquo;Household&rdquo; or &ldquo;If I move to Denver.&rdquo;</span>
             </div>
-            <div className="field">
-              <label htmlFor="p-email">Email (optional)</label>
-              <input id="p-email" className="input" type="email" autoComplete="email" value={active.email}
-                aria-describedby="p-email-hint" onChange={(e) => actions.updateProfile(active.id, { email: e.target.value })} />
-              <span id="p-email-hint" className="hint">Only used to fill in the contact form for you. It stays on this device.</span>
-            </div>
+            {cloud && user ? (
+              <div className="field">
+                <label htmlFor="p-email">Account email</label>
+                <input id="p-email" className="input" type="email" value={user.email} readOnly aria-describedby="p-email-hint" />
+                <span id="p-email-hint" className="hint">This is the email you sign in with.</span>
+              </div>
+            ) : (
+              <div className="field">
+                <label htmlFor="p-email">Email (optional)</label>
+                <input id="p-email" className="input" type="email" autoComplete="email" value={active.email}
+                  aria-describedby="p-email-hint" onChange={(e) => actions.updateProfile(active.id, { email: e.target.value })} />
+                <span id="p-email-hint" className="hint">Only used to fill in the contact form for you. It stays on this device.</span>
+              </div>
+            )}
             <div className="field">
               <label htmlFor="p-cur">Currency</label>
               <select id="p-cur" className="select" value={active.currency}
@@ -92,7 +104,9 @@ export function Profiles() {
         <section className="card" aria-labelledby="data-h">
           <h2 id="data-h" className="section-title"><span aria-hidden="true">📦</span> Back up or move a budget</h2>
           <p className="hint" style={{ marginTop: 8 }}>
-            Your budgets live in this browser. Save a copy to keep it safe, or open it on another device.
+            {cloud
+              ? "Your budgets are saved to your account. You can still save a copy as a file, or open one you saved earlier."
+              : "Your budgets live in this browser. Save a copy to keep it safe, or open it on another device."}
           </p>
           <div className="btn-row">
             <button type="button" className="btn btn-secondary btn-sm" onClick={exportProfile}>
@@ -106,6 +120,35 @@ export function Profiles() {
           </div>
           {msg && <p className={`notice ${msg.kind}`} role="status" style={{ marginTop: 12, marginBottom: 0 }}>{msg.text}</p>}
         </section>
+
+        {cloud && user ? (
+          <section className="card" aria-labelledby="acct-h">
+            <h2 id="acct-h" className="section-title"><span aria-hidden="true">🔐</span> Your account</h2>
+            <p className="hint" style={{ marginTop: 8 }}>Signed in as <strong>{user.email}</strong>.</p>
+            <details className="acct-details">
+              <summary>Change your password</summary>
+              <NewPasswordForm compact />
+            </details>
+            <div className="btn-row">
+              <button type="button" className="btn btn-secondary btn-sm"
+                onClick={async () => { await actions.signOut(); router.push("/"); }}>
+                Sign out
+              </button>
+            </div>
+          </section>
+        ) : accountsEnabled ? (
+          <section className="card" aria-labelledby="acct-h">
+            <h2 id="acct-h" className="section-title"><span aria-hidden="true">☁️</span> Save your budgets to an account</h2>
+            <p className="hint" style={{ marginTop: 8 }}>
+              A free account keeps your budgets safe and lets you check your progress from any device.
+              We&apos;ll bring the budgets on this device along with you.
+            </p>
+            <div className="btn-row">
+              <Link href="/login?mode=signup&next=/profile" className="btn btn-primary btn-sm">Create an account</Link>
+              <Link href="/login?next=/profile" className="btn btn-ghost btn-sm">I already have one</Link>
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <div className="stack">
@@ -159,11 +202,13 @@ export function Profiles() {
               <input id="new-budget" className="input" value={newBudgetName} maxLength={60} placeholder="e.g. Household, or What if I move"
                 onChange={(e) => setNewBudgetName(e.target.value)} />
             </div>
-            <div className="field">
-              <label htmlFor="new-name">What should we call you? <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-              <input id="new-name" className="input" value={personName} maxLength={40} placeholder="e.g. Sam" autoComplete="nickname"
-                onChange={(e) => setNewName(e.target.value)} />
-            </div>
+            {!cloud && (
+              <div className="field">
+                <label htmlFor="new-name">What should we call you? <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+                <input id="new-name" className="input" value={personName} maxLength={40} placeholder="e.g. Sam" autoComplete="nickname"
+                  onChange={(e) => setNewName(e.target.value)} />
+              </div>
+            )}
             <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: "0.92rem" }}>
               <input type="checkbox" checked={withSample} onChange={(e) => setWithSample(e.target.checked)} style={{ width: 18, height: 18 }} />
               Start with the example numbers

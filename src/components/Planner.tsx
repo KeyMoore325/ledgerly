@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { NumberInput } from "./NumberInput";
 import { AiAdvice } from "./AiAdvice";
 import { InfoTip } from "./InfoTip";
+import { AccountBanners, SaveStatus } from "./AccountNotices";
 
 type ListKey = "expenses" | "debts" | "goals";
 
@@ -53,12 +54,19 @@ const MOOD_EMOJI = { good: "🌟", caution: "🌱", neutral: "👋" } as const;
 const MOOD_COLOR = { good: "var(--success)", caution: "var(--warning)", neutral: "var(--primary)" } as const;
 
 export function Planner() {
-  const { active, profiles, ready } = useStore();
+  const { active, profiles, ready, loadError } = useStore();
   const budget = active?.budget;
   const analysis = useMemo(() => (budget ? analyze(budget, active?.currency) : null), [budget, active?.currency]);
   const [showAllIdeas, setShowAllIdeas] = useState(false);
   const IDEA_LIMIT = 5;
 
+  if (loadError) {
+    return (
+      <div className="card" role="alert">
+        <p style={{ margin: 0 }}>{loadError}</p>
+      </div>
+    );
+  }
   if (!ready || !active || !budget || !analysis) {
     return (
       <div className="card" aria-busy="true">
@@ -101,6 +109,7 @@ export function Planner() {
     <div className="planner">
       {/* ------------------------------------------------------------- inputs */}
       <div className="stack">
+        <AccountBanners />
         <div className="card welcome">
           <span className="avatar" style={{ background: active.color }} aria-hidden="true">
             {profileInitial(active)}
@@ -118,9 +127,7 @@ export function Planner() {
                 </>
               )}
             </p>
-            <p className="small muted" style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
-              <span className="live-dot" aria-hidden="true" /> Everything saves as you go, so there&apos;s no need to hit save.
-            </p>
+            <SaveStatus />
           </div>
           <div className="btn-row">
             {profiles.length > 1 && (

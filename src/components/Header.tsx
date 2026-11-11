@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { nav, site } from "@/lib/site";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
+import { AccountButton } from "./AccountButton";
 
 export function Header() {
   const pathname = usePathname();
@@ -39,6 +40,7 @@ export function Header() {
           {links}
         </nav>
         <ThemeToggle />
+        <AccountButton />
         <button
           type="button"
           className="btn btn-ghost icon-btn menu-btn"
